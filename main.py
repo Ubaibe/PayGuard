@@ -15,9 +15,10 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from dateutil.rrule import *
-from apscheduler.triggers.date import DateTrigger
+import sqlite3
 import re
 from datetime import datetime
+import pandas as pd
 
 load_dotenv()
 
@@ -52,6 +53,27 @@ USDC_ADDRESS = "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"
 ERC20_ABI = [
     {"constant":False,"inputs":[{"name":"recipient","type":"address"},{"name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"type":"function"}
 ]
+
+conn = sqlite3.connect(
+    "payguard.db",
+    check_same_thread=False
+)
+
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS payment_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT,
+    amount REAL,
+    recipient TEXT,
+    tx_hash TEXT,
+    status TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+conn.commit()
 
 # ============== SCHEDULER ==============
 
@@ -91,7 +113,50 @@ def send_scheduled_payment(amount: float, recipient: str, job_id: str):
 
         signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-        st.toast(f"✅ Recurring payment sent! Tx: {tx_hash.hex()[:12]}...", icon="💸")
+        tx_hash_hex = tx_hash.hex()
+
+        st.toast(
+            f"✅ Recurring payment sent!",
+            icon="💸"
+        )
+
+        tx_hash_hex = tx_hash.hex()
+
+        cursor.execute(
+            """
+            INSERT INTO payment_history
+            (
+                job_id,
+                amount,
+                recipient,
+                tx_hash,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                amount,
+                recipient,
+                tx_hash_hex,
+                "success"
+            )
+        )
+
+        conn.commit()
+
+        print(f"""
+        Recurring Payment Executed
+
+        Amount: {amount} USDC
+        Recipient: {recipient}
+
+        Tx Hash:
+        {tx_hash_hex}
+
+        Explorer:
+        https://sepolia.arbiscan.io/tx/{tx_hash_hex}
+        """)
     except Exception as e:
         st.toast(f"❌ Scheduled payment failed: {str(e)[:80]}", icon="⚠️")
 
@@ -138,6 +203,16 @@ def get_next_nth_weekday(
     )
 
     return rule[0]
+
+def load_payment_data():
+
+    query = """
+    SELECT *
+    FROM payment_history
+    ORDER BY created_at DESC
+    """
+
+    return pd.read_sql_query(query, conn)
 
 def parse_recurrence(frequency: str):
 
@@ -290,6 +365,31 @@ def execute_payment(amount: float, token: str, frequency: str, recipient: str) -
         })
         signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+
+        tx_hash_hex = tx_hash.hex()
+
+        cursor.execute(
+            """
+            INSERT INTO payment_history
+            (
+                job_id,
+                amount,
+                recipient,
+                tx_hash,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "one-time",
+                amount,
+                recipient,
+                tx_hash_hex,
+                "success"
+            )
+        )
+
+        conn.commit()
 
         return f"""
     ✅ **Payment Sent Successfully!**
@@ -473,6 +573,96 @@ with st.sidebar:
     else:
         st.info("No active jobs yet.")
 
+    df = load_payment_data()
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Total Payments",
+        f"{len(df)}"
+    )
+
+with col2:
+
+    total_volume = (
+        df["amount"].sum()
+        if not df.empty
+        else 0
+    )
+
+    st.metric(
+        "Total USDC Sent",
+        f"{total_volume:.2f}"
+    )
+
+with col3:
+
+    success_count = (
+        len(df[df["status"] == "success"])
+        if not df.empty
+        else 0
+    )
+
+    st.metric(
+        "Successful Payments",
+        success_count
+    )
+
+if not df.empty:
+
+    df["created_at"] = pd.to_datetime(df["created_at"])
+
+    daily = (
+        df.groupby(
+            df["created_at"].dt.date
+        )["amount"]
+        .sum()
+        .reset_index()
+    )
+
+    st.subheader("📈 Daily Payment Volume")
+
+    st.line_chart(
+        daily,
+        x="created_at",
+        y="amount"
+    )
+
+st.subheader("💸 Recent Transactions")
+if not df.empty:
+
+    st.dataframe(
+        df[
+            [
+                "created_at",
+                "amount",
+                "recipient",
+                "tx_hash",
+                "status"
+            ]
+        ],
+        use_container_width=True
+    )
+
+st.subheader("📅 Upcoming Scheduled Payments")
+jobs = scheduler.get_jobs()
+
+for job in jobs:
+
+    amount = job.args[0]
+    recipient = job.args[1]
+
+    st.info(
+        f"""
+        {amount} USDC
+        → {recipient}
+
+        Next Run:
+        {job.next_run_time}
+        """
+    )
+
 # ============== CHAT ==============
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -497,8 +687,7 @@ if prompt := st.chat_input("Describe a payment..."):
             if not response:
                 response = str(final_message)
 
-
-
+            st.success("Payment executed successfully")
             st.markdown(response)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
