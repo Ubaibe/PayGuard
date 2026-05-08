@@ -8,3 +8,5 @@ sqlalchemy==2.0.36
 dateparser==1.2.0
 python-dateutil==2.9.0.post0
 pandas==2.2.3
+web3==7.0.0
+apscheduler==3.10.4
