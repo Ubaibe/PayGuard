@@ -1,3 +1,21 @@
 streamlit
 pandas
+langchain
+langchain-openai
+langgraph
 
+openai
+
+python-dotenv
+requests
+
+web3
+eth-account
+
+apscheduler
+sqlalchemy
+
+
+
+python-dateutil
+dateparser
