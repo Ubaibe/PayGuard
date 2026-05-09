@@ -1,7 +1,6 @@
 streamlit==1.38.0
 
 langchain==0.2.16
-langchain-core==0.2.38
 langchain-openai==0.1.25
 langgraph==0.2.16
 
@@ -14,10 +13,9 @@ web3==6.11.3
 eth-account==0.10.0
 
 apscheduler==3.10.4
+sqlalchemy==2.0.32
 
 pandas==2.1.4
 
 python-dateutil==2.9.0.post0
 dateparser==1.2.0
-
-pydantic==2.8.2
