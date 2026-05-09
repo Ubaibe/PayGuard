@@ -474,7 +474,6 @@ def cancel_job(job_id: str) -> str:
     """Cancel a scheduled job"""
     try:
         scheduler.remove_job(job_id)
-        scheduler.remove_job(job.id)
         return f"✅ Job `{job_id}` cancelled successfully."
     except Exception as e:
         return f"❌ Could not cancel job: {str(e)}"
