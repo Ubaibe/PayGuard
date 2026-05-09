@@ -509,6 +509,16 @@ CRITICAL RULES:
 - Never answer from memory.
 - Always use tools for payment or scheduling operations.
 - After a tool returns results, summarize them naturally.
+- Always call tools using STRICT valid JSON.
+- Never output malformed JSON.
+- Never duplicate tool arguments.
+- Never include comments inside JSON.
+- Always include:
+  token,
+  amount,
+  recipient,
+  frequency
+when executing payments.
 """
     for attempt in range(3):  # Retry up to 3 times
         try:
