@@ -115,7 +115,7 @@ def send_scheduled_payment(amount: float, recipient: str, job_id: str):
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         tx_hash_hex = tx_hash.hex()
 
-        st.toast(
+        print(
             f"✅ Recurring payment sent!",
             icon="💸"
         )
